@@ -1,12 +1,15 @@
 import { useState, type FormEvent } from "react"
 import { Link, useNavigate } from "react-router-dom"
-import { Building2, CircleAlert, Eye, EyeOff, UserCog, UserPlus } from "lucide-react"
+import { FirebaseError } from "firebase/app"
+import { Building2, CircleAlert, Eye, EyeOff, LoaderCircle, UserCog, UserPlus } from "lucide-react"
 import { toast } from "sonner"
 import AuthLayout from "@/components/layout/AuthLayout"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { useAuth } from "@/context/AuthContext"
+import { authErrorMessage } from "@/lib/authErrors"
 import { cn } from "@/lib/utils"
 
 const structureTypes = ["Centre de Santé", "Poste de Santé", "Hôpital", "Clinique", "Pharmacie hospitalière"]
@@ -32,6 +35,7 @@ function FieldError({ message }: { message?: string }) {
 
 export default function Register() {
   const navigate = useNavigate()
+  const { signUpWithEmail } = useAuth()
   const [nom, setNom] = useState("")
   const [email, setEmail] = useState("")
   const [telephone, setTelephone] = useState("")
@@ -43,10 +47,12 @@ export default function Register() {
   const [showPwd, setShowPwd] = useState(false)
   const [showConfirm, setShowConfirm] = useState(false)
   const [errors, setErrors] = useState<FormErrors>({})
+  const [formError, setFormError] = useState("")
+  const [submitting, setSubmitting] = useState(false)
 
   const clear = (key: keyof FormErrors) => setErrors((x) => ({ ...x, [key]: undefined }))
 
-  const handleSubmit = (e: FormEvent) => {
+  const handleSubmit = async (e: FormEvent) => {
     e.preventDefault()
     const next: FormErrors = {}
 
@@ -65,22 +71,46 @@ export default function Register() {
     else if (confirm !== password) next.confirm = "Les mots de passe ne sont pas identiques."
 
     setErrors(next)
+    setFormError("")
     if (Object.keys(next).length > 0) return
 
-    // L'enregistrement réel du compte viendra avec le backend
-    toast.success("Compte créé", {
-      description: "Il sera activé après validation par un administrateur.",
-    })
-    navigate("/login")
+    setSubmitting(true)
+    try {
+      await signUpWithEmail(nom, email, password)
+      toast.success("Compte créé", {
+        description: "Bienvenue sur e-Stock Santé. Un e-mail de vérification vous a été envoyé.",
+      })
+      navigate("/dashboard")
+    } catch (err) {
+      if (err instanceof FirebaseError && err.code === "auth/email-already-in-use") {
+        setErrors({ email: "Un compte existe déjà avec cette adresse e-mail." })
+      } else if (err instanceof FirebaseError && err.code === "auth/weak-password") {
+        setErrors({ password: "Mot de passe trop faible : 6 caractères minimum." })
+      } else {
+        setFormError(authErrorMessage(err) ?? "")
+      }
+    } finally {
+      setSubmitting(false)
+    }
   }
 
   return (
     <AuthLayout
       wide
       title="Créer un compte"
-      subtitle="Votre compte sera activé après validation par un administrateur."
+      subtitle="Renseignez vos informations pour accéder à la plateforme."
     >
       <form className="grid gap-x-4 gap-y-3 sm:grid-cols-2" onSubmit={handleSubmit} noValidate>
+        {formError && (
+          <div
+            role="alert"
+            className="flex items-start gap-2.5 rounded-xl border border-[#EF4444]/30 bg-[#EF4444]/10 px-4 py-3 text-sm text-[#B91C1C] sm:col-span-2"
+          >
+            <CircleAlert className="mt-0.5 size-4 shrink-0" />
+            {formError}
+          </div>
+        )}
+
         <div className="space-y-1.5">
           <Label htmlFor="nom" className="text-[#172033]">Nom complet</Label>
           <Input
@@ -173,6 +203,7 @@ export default function Register() {
             <Input
               id="password"
               type={showPwd ? "text" : "password"}
+              autoComplete="new-password"
               placeholder="6 caractères minimum"
               value={password}
               onChange={(e) => { setPassword(e.target.value); clear("password") }}
@@ -197,6 +228,7 @@ export default function Register() {
             <Input
               id="confirm"
               type={showConfirm ? "text" : "password"}
+              autoComplete="new-password"
               placeholder="Répétez le mot de passe"
               value={confirm}
               onChange={(e) => { setConfirm(e.target.value); clear("confirm") }}
@@ -215,8 +247,9 @@ export default function Register() {
           <FieldError message={errors.confirm} />
         </div>
 
-        <Button type="submit" className="mt-2 h-10 w-full bg-[#2563EB] text-white hover:bg-[#1D4ED8] sm:col-span-2">
-          <UserPlus className="size-4" /> Créer mon compte
+        <Button type="submit" disabled={submitting} className="mt-2 h-10 w-full bg-[#2563EB] text-white hover:bg-[#1D4ED8] sm:col-span-2">
+          {submitting ? <LoaderCircle className="size-4 animate-spin" /> : <UserPlus className="size-4" />}
+          {submitting ? "Création du compte..." : "Créer mon compte"}
         </Button>
       </form>
 

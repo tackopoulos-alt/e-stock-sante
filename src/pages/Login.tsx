@@ -1,11 +1,13 @@
 import { useState, type FormEvent } from "react"
 import { Link, useNavigate } from "react-router-dom"
-import { CircleAlert, Eye, EyeOff, LogIn } from "lucide-react"
+import { CircleAlert, Eye, EyeOff, LoaderCircle, LogIn } from "lucide-react"
 import { toast } from "sonner"
 import AuthLayout from "@/components/layout/AuthLayout"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { useAuth } from "@/context/AuthContext"
+import { authErrorMessage } from "@/lib/authErrors"
 import { cn } from "@/lib/utils"
 
 function GoogleIcon() {
@@ -31,12 +33,23 @@ function FieldError({ message }: { message?: string }) {
 
 export default function Login() {
   const navigate = useNavigate()
+  const { signInWithEmail, signInWithGoogle } = useAuth()
   const [show, setShow] = useState(false)
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [errors, setErrors] = useState<{ email?: string; password?: string }>({})
+  const [formError, setFormError] = useState("")
+  const [submitting, setSubmitting] = useState(false)
+  const [googleLoading, setGoogleLoading] = useState(false)
 
-  const handleSubmit = (e: FormEvent) => {
+  const busy = submitting || googleLoading
+
+  const success = () => {
+    toast.success("Connexion réussie", { description: "Vous êtes redirigé vers le tableau de bord." })
+    navigate("/dashboard")
+  }
+
+  const handleSubmit = async (e: FormEvent) => {
     e.preventDefault()
     const next: { email?: string; password?: string } = {}
 
@@ -46,28 +59,60 @@ export default function Login() {
     if (!password) next.password = "Saisissez votre mot de passe."
 
     setErrors(next)
+    setFormError("")
     if (Object.keys(next).length > 0) return
 
-    // La vérification des identifiants viendra avec le backend
-    toast.success("Connexion réussie", {
-      description: "Vous êtes redirigé vers le tableau de bord.",
-    })
-    navigate("/dashboard")
+    setSubmitting(true)
+    try {
+      await signInWithEmail(email, password)
+      success()
+    } catch (err) {
+      setFormError(authErrorMessage(err) ?? "")
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  const handleGoogle = async () => {
+    setErrors({})
+    setFormError("")
+    setGoogleLoading(true)
+    try {
+      await signInWithGoogle()
+      success()
+    } catch (err) {
+      const message = authErrorMessage(err)
+      if (message) setFormError(message)
+    } finally {
+      setGoogleLoading(false)
+    }
   }
 
   return (
     <AuthLayout title="Connexion" subtitle="Accédez à la gestion de votre stock de médicaments.">
       <form className="space-y-5" onSubmit={handleSubmit} noValidate>
+        {formError && (
+          <div
+            role="alert"
+            className="flex items-start gap-2.5 rounded-xl border border-[#EF4444]/30 bg-[#EF4444]/10 px-4 py-3 text-sm text-[#B91C1C]"
+          >
+            <CircleAlert className="mt-0.5 size-4 shrink-0" />
+            {formError}
+          </div>
+        )}
+
         <div className="space-y-2">
           <Label htmlFor="email" className="text-[#172033]">Adresse e-mail</Label>
           <Input
             id="email"
             type="email"
+            autoComplete="username"
             placeholder="nom@structure.sn"
             value={email}
             onChange={(e) => {
               setEmail(e.target.value)
               setErrors((x) => ({ ...x, email: undefined }))
+              setFormError("")
             }}
             aria-invalid={!!errors.email}
             className={cn("h-11 border-[#E2E8F0] bg-white", errors.email && "border-[#EF4444]")}
@@ -86,11 +131,13 @@ export default function Login() {
             <Input
               id="password"
               type={show ? "text" : "password"}
+              autoComplete="current-password"
               placeholder="Votre mot de passe"
               value={password}
               onChange={(e) => {
                 setPassword(e.target.value)
                 setErrors((x) => ({ ...x, password: undefined }))
+                setFormError("")
               }}
               aria-invalid={!!errors.password}
               className={cn("h-11 border-[#E2E8F0] bg-white pr-11", errors.password && "border-[#EF4444]")}
@@ -107,8 +154,9 @@ export default function Login() {
           <FieldError message={errors.password} />
         </div>
 
-        <Button type="submit" className="h-11 w-full bg-[#2563EB] text-white hover:bg-[#1D4ED8]">
-          <LogIn className="size-4" /> Se connecter
+        <Button type="submit" disabled={busy} className="h-11 w-full bg-[#2563EB] text-white hover:bg-[#1D4ED8]">
+          {submitting ? <LoaderCircle className="size-4 animate-spin" /> : <LogIn className="size-4" />}
+          {submitting ? "Connexion..." : "Se connecter"}
         </Button>
       </form>
 
@@ -118,8 +166,15 @@ export default function Login() {
         <div className="h-px flex-1 bg-[#E2E8F0]" />
       </div>
 
-      <Button type="button" variant="outline" className="h-11 w-full border-[#E2E8F0] bg-white text-[#172033] hover:bg-slate-50">
-        <GoogleIcon /> Continuer avec Google
+      <Button
+        type="button"
+        variant="outline"
+        disabled={busy}
+        onClick={handleGoogle}
+        className="h-11 w-full border-[#E2E8F0] bg-white text-[#172033] hover:bg-slate-50"
+      >
+        {googleLoading ? <LoaderCircle className="size-4 animate-spin" /> : <GoogleIcon />}
+        {googleLoading ? "Ouverture de Google..." : "Continuer avec Google"}
       </Button>
 
       <p className="mt-8 text-center text-sm text-[#64748B]">

@@ -1,29 +1,50 @@
 import { useState, type FormEvent } from "react"
 import { Link } from "react-router-dom"
-import { ArrowLeft, CircleAlert, MailCheck, Send } from "lucide-react"
+import { FirebaseError } from "firebase/app"
+import { sendPasswordResetEmail } from "firebase/auth"
+import { ArrowLeft, CircleAlert, LoaderCircle, MailCheck, Send } from "lucide-react"
 import { toast } from "sonner"
 import AuthLayout from "@/components/layout/AuthLayout"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { auth } from "@/lib/firebase"
 import { cn } from "@/lib/utils"
+
+function errorMessage(err: unknown) {
+  if (err instanceof FirebaseError) {
+    if (err.code === "auth/invalid-email") return "Saisissez une adresse e-mail valide."
+    if (err.code === "auth/too-many-requests") return "Trop de tentatives. Réessayez dans quelques minutes."
+    if (err.code === "auth/network-request-failed") return "Connexion impossible : vérifiez votre connexion internet."
+  }
+  return "Impossible d'envoyer l'e-mail pour le moment. Réessayez."
+}
 
 export default function MotDePasseOublie() {
   const [email, setEmail] = useState("")
   const [error, setError] = useState("")
+  const [loading, setLoading] = useState(false)
   const [sent, setSent] = useState(false)
 
-  const handleSubmit = (e: FormEvent) => {
+  const handleSubmit = async (e: FormEvent) => {
     e.preventDefault()
 
     if (!email.trim()) return setError("Saisissez votre adresse e-mail.")
     if (!/^\S+@\S+\.\S+$/.test(email.trim())) return setError("Saisissez une adresse e-mail valide.")
 
-    // Provisoire : l'envoi réel de l'e-mail viendra avec le backend
-    toast.success("Demande envoyée", {
-      description: "Consultez votre boîte mail pour réinitialiser votre mot de passe.",
-    })
-    setSent(true)
+    setLoading(true)
+    try {
+      auth.languageCode = "fr" // l'e-mail est envoyé en français
+      await sendPasswordResetEmail(auth, email.trim())
+      toast.success("Demande envoyée", {
+        description: "Consultez votre boîte mail pour réinitialiser votre mot de passe.",
+      })
+      setSent(true)
+    } catch (err) {
+      setError(errorMessage(err))
+    } finally {
+      setLoading(false)
+    }
   }
 
   if (sent) {
@@ -35,6 +56,7 @@ export default function MotDePasseOublie() {
             Si un compte existe avec l'adresse <span className="font-semibold">{email.trim()}</span>, un lien de
             réinitialisation vient d'être envoyé.
           </p>
+          <p className="mt-2 text-sm text-[#64748B]">Pensez à vérifier vos courriers indésirables (spam).</p>
         </div>
         <Link
           to="/login"
@@ -74,8 +96,9 @@ export default function MotDePasseOublie() {
           )}
         </div>
 
-        <Button type="submit" className="h-11 w-full bg-[#2563EB] text-white hover:bg-[#1D4ED8]">
-          <Send className="size-4" /> Envoyer le lien
+        <Button type="submit" disabled={loading} className="h-11 w-full bg-[#2563EB] text-white hover:bg-[#1D4ED8]">
+          {loading ? <LoaderCircle className="size-4 animate-spin" /> : <Send className="size-4" />}
+          {loading ? "Envoi en cours..." : "Envoyer le lien"}
         </Button>
       </form>
 

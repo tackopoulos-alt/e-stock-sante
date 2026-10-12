@@ -1,6 +1,7 @@
 import { NavLink, useNavigate } from "react-router-dom"
 import { BellRing, Boxes, History, LayoutDashboard, LogOut, PackageCheck, Pill, UserCircle, Users, X } from "lucide-react"
 import { toast } from "sonner"
+import { useAuth } from "@/context/AuthContext"
 import { useData } from "@/context/DataContext"
 import { initials } from "@/lib/format"
 import { cn } from "@/lib/utils"
@@ -24,8 +25,10 @@ interface SidebarProps {
 export default function Sidebar({ open, onClose, alertCount }: SidebarProps) {
   const navigate = useNavigate()
   const { currentUser } = useData()
+  const { logout } = useAuth()
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    await logout()
     toast.success("Vous êtes déconnecté")
     navigate("/login")
   }
