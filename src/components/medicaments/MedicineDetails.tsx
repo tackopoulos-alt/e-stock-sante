@@ -3,8 +3,8 @@ import { ArrowRight, Pill } from "lucide-react"
 import LevelBadge from "@/components/common/LevelBadge"
 import Modal from "@/components/common/Modal"
 import { Button } from "@/components/ui/button"
-import { useData } from "@/context/DataContext"
 import { formatDateTime } from "@/lib/format"
+import { describeError, useMedicineDetail, useMedicineMovements } from "@/lib/queries"
 import { daysUntil, getLevel, medLabel } from "@/lib/stock"
 import { cn } from "@/lib/utils"
 import type { Medicine } from "@/lib/types"
@@ -24,7 +24,9 @@ function ExpiryBadge({ date }: { date?: string }) {
 }
 
 export default function MedicineDetails({ medicine, onClose }: { medicine: Medicine | null; onClose: () => void }) {
-  const { lots, movements, users } = useData()
+  // Les lots et les derniers mouvements viennent du serveur ; rien n'est demandé tant qu'aucun médicament n'est ouvert
+  const detail = useMedicineDetail(medicine?.id ?? null)
+  const movements = useMedicineMovements(medicine?.id ?? null, 3)
   if (!medicine) return null
 
   const level = getLevel(medicine)
@@ -33,8 +35,8 @@ export default function MedicineDetails({ medicine, onClose }: { medicine: Medic
   const seuilPosition = Math.min(100, (medicine.seuilMin / max) * 100)
   const barColor = level === "normal" ? "bg-[#10B981]" : level === "faible" ? "bg-[#F59E0B]" : "bg-[#EF4444]"
 
-  const myLots = lots.filter((l) => l.medicineId === medicine.id && l.quantite > 0)
-  const lastMovements = movements.filter((mv) => mv.medicineId === medicine.id).slice(0, 3)
+  const myLots = (detail.data?.lots ?? []).filter((l) => l.quantite > 0)
+  const lastMovements = movements.data?.items ?? []
 
   const infos: [string, string][] = [
     ["Référence", medicine.reference],
@@ -104,7 +106,11 @@ export default function MedicineDetails({ medicine, onClose }: { medicine: Medic
 
         <div>
           <h3 className="mb-2 text-sm font-semibold text-[#0F2747]">Lots en stock</h3>
-          {myLots.length === 0 ? (
+          {detail.isPending ? (
+            <p className="text-sm text-[#64748B]">Chargement...</p>
+          ) : detail.isError ? (
+            <p className="text-sm text-[#B91C1C]">{describeError(detail.error)}</p>
+          ) : myLots.length === 0 ? (
             <p className="text-sm text-[#64748B]">Aucun lot enregistré.</p>
           ) : (
             <ul className="divide-y divide-[#E2E8F0] rounded-xl border border-[#E2E8F0]">
@@ -112,7 +118,7 @@ export default function MedicineDetails({ medicine, onClose }: { medicine: Medic
                 <li key={lot.id} className="flex flex-wrap items-center justify-between gap-2 px-4 py-2.5 text-sm">
                   <span className="font-semibold text-[#0F2747]">{lot.numero}</span>
                   <span className="text-[#64748B]">{lot.quantite} unité(s)</span>
-                  <ExpiryBadge date={lot.expiration} />
+                  <ExpiryBadge date={lot.dateExpiration ?? undefined} />
                 </li>
               ))}
             </ul>
@@ -121,14 +127,18 @@ export default function MedicineDetails({ medicine, onClose }: { medicine: Medic
 
         <div>
           <h3 className="mb-2 text-sm font-semibold text-[#0F2747]">Derniers mouvements</h3>
-          {lastMovements.length === 0 ? (
+          {movements.isPending ? (
+            <p className="text-sm text-[#64748B]">Chargement...</p>
+          ) : movements.isError ? (
+            <p className="text-sm text-[#B91C1C]">{describeError(movements.error)}</p>
+          ) : lastMovements.length === 0 ? (
             <p className="text-sm text-[#64748B]">Aucun mouvement pour le moment.</p>
           ) : (
             <ul className="divide-y divide-[#E2E8F0] rounded-xl border border-[#E2E8F0]">
               {lastMovements.map((mv) => (
                 <li key={mv.id} className="flex items-center justify-between gap-3 px-4 py-2.5 text-sm">
                   <span className="text-[#64748B]">{formatDateTime(mv.date)}</span>
-                  <span className="hidden truncate text-[#172033] sm:block">{users.find((u) => u.id === mv.userId)?.nom}</span>
+                  <span className="hidden truncate text-[#172033] sm:block">{mv.user.nom}</span>
                   <span className={cn("font-bold", mv.type === "entree" ? "text-[#10B981]" : "text-[#2563EB]")}>
                     {mv.type === "entree" ? "Entrée +" : "Sortie −"}
                     {mv.quantite}

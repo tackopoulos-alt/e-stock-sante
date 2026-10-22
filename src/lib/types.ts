@@ -33,6 +33,8 @@ export interface Medicine {
   nom: string
   reference: string
   categorie: string
+  // L'identifiant de la catégorie côté serveur (absent des données de démonstration)
+  categoryId?: string
   dosage: string
   forme: string
   laboratoire: string

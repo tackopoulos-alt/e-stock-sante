@@ -1,4 +1,6 @@
+import { useEffect } from "react"
 import { Outlet } from "react-router-dom"
+import { useQueryClient } from "@tanstack/react-query"
 import { LoaderCircle } from "lucide-react"
 import { DisabledScreen, ErrorScreen, PendingScreen, VerifyEmailScreen } from "@/components/account/AccountScreens"
 import CompleteRegistration from "@/components/account/CompleteRegistration"
@@ -8,6 +10,11 @@ import { useAccount } from "@/context/AccountContext"
 // l'application seulement si le compte est actif, sinon l'écran qui explique ce qu'il reste à faire.
 export default function AccountGate() {
   const { state } = useAccount()
+  const queryClient = useQueryClient()
+
+  // À la déconnexion (cet écran disparaît), on oublie tout ce que le serveur avait répondu :
+  // la personne suivante ne doit jamais voir les données de la précédente
+  useEffect(() => () => queryClient.clear(), [queryClient])
 
   switch (state.status) {
     case "loading":

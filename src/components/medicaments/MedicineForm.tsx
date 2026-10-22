@@ -1,12 +1,13 @@
 import { useState, type FormEvent } from "react"
-import { ChevronDown, CircleAlert, Info } from "lucide-react"
+import { ChevronDown, CircleAlert, Info, LoaderCircle } from "lucide-react"
 import { toast } from "sonner"
 import Modal from "@/components/common/Modal"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { useData } from "@/context/DataContext"
-import { CATEGORIES, FORMES } from "@/data/options"
+import { FORMES } from "@/data/options"
+import { ApiError } from "@/lib/api"
+import { createMedicine, describeError, updateMedicine, useCategories, useMedicines, useRefreshAfterChange, type MedicineInput } from "@/lib/queries"
 import type { Medicine } from "@/lib/types"
 import { cn } from "@/lib/utils"
 
@@ -72,7 +73,9 @@ interface MedicineFormProps {
 }
 
 export default function MedicineForm({ medicine, onClose, onSaved, fromEntry = false }: MedicineFormProps) {
-  const { medicines, addMedicine, updateMedicine } = useData()
+  const { medicines } = useMedicines()
+  const { categories, loading: loadingCategories } = useCategories()
+  const refresh = useRefreshAfterChange()
   const [values, setValues] = useState<Values>({
     nom: medicine?.nom ?? "",
     reference: medicine?.reference ?? `MED-${String(medicines.length + 1).padStart(3, "0")}`,
@@ -85,13 +88,15 @@ export default function MedicineForm({ medicine, onClose, onSaved, fromEntry = f
     description: medicine?.description ?? "",
   })
   const [errors, setErrors] = useState<Errors>({})
+  const [formError, setFormError] = useState("")
+  const [submitting, setSubmitting] = useState(false)
 
   const set = (key: keyof Values) => (value: string) => {
     setValues((v) => ({ ...v, [key]: value }))
     setErrors((e) => ({ ...e, [key]: undefined }))
   }
 
-  const submit = (e: FormEvent) => {
+  const submit = async (e: FormEvent) => {
     e.preventDefault()
     const next: Errors = {}
 
@@ -113,13 +118,18 @@ export default function MedicineForm({ medicine, onClose, onSaved, fromEntry = f
       if (!Number.isInteger(stock) || stock < 0) next.stockInitial = "Saisissez un nombre entier (0 ou plus)."
     }
 
-    setErrors(next)
-    if (Object.keys(next).length > 0) return
+    // Le serveur range les catégories par identifiant
+    const category = categories.find((c) => c.nom === values.categorie)
+    if (values.categorie && !category) next.categorie = "Catégorie introuvable : rechargez la page."
 
-    const input = {
+    setErrors(next)
+    setFormError("")
+    if (Object.keys(next).length > 0 || !category) return
+
+    const input: MedicineInput = {
       nom: values.nom.trim(),
       reference: values.reference.trim(),
-      categorie: values.categorie,
+      categoryId: category.id,
       dosage: values.dosage.trim(),
       forme: values.forme,
       laboratoire: values.laboratoire.trim(),
@@ -127,25 +137,37 @@ export default function MedicineForm({ medicine, onClose, onSaved, fromEntry = f
       description: values.description.trim(),
     }
 
-    const result = medicine ? updateMedicine(medicine.id, input) : addMedicine(input, stock)
-    if (!result.ok) {
-      setErrors({ reference: result.error })
-      return
+    setSubmitting(true)
+    try {
+      if (medicine) {
+        await updateMedicine(medicine.id, input)
+        void refresh()
+        toast.success("Médicament modifié", { description: `${input.nom} ${input.dosage} a été mis à jour.` })
+      } else {
+        const result = await createMedicine(input, stock)
+        void refresh()
+        onSaved?.(result.id)
+        if (result.stockError) {
+          toast.warning("Médicament ajouté, mais son stock initial n'a pas été enregistré", {
+            description: `${result.stockError} Enregistrez l'entrée depuis la page Stocks.`,
+          })
+        } else {
+          toast.success("Médicament ajouté", {
+            description:
+              stock > 0
+                ? `${input.nom} ${input.dosage} démarre avec un stock de ${stock}.`
+                : `${input.nom} ${input.dosage} est dans le référentiel. Enregistrez une entrée pour alimenter son stock.`,
+          })
+        }
+      }
+      onClose()
+    } catch (err) {
+      // 409 : la référence existe déjà dans cette structure
+      if (err instanceof ApiError && err.status === 409) setErrors({ reference: err.message })
+      else setFormError(describeError(err))
+    } finally {
+      setSubmitting(false)
     }
-
-    if (!medicine && result.id) onSaved?.(result.id)
-
-    if (medicine) {
-      toast.success("Médicament modifié", { description: `${input.nom} ${input.dosage} a été mis à jour.` })
-    } else {
-      toast.success("Médicament ajouté", {
-        description:
-          stock > 0
-            ? `${input.nom} ${input.dosage} démarre avec un stock de ${stock}.`
-            : `${input.nom} ${input.dosage} est dans le référentiel. Enregistrez une entrée pour alimenter son stock.`,
-      })
-    }
-    onClose()
   }
 
   return (
@@ -156,10 +178,11 @@ export default function MedicineForm({ medicine, onClose, onSaved, fromEntry = f
       className="sm:max-w-2xl"
       footer={
         <>
-          <Button type="button" variant="outline" onClick={onClose}>
+          <Button type="button" variant="outline" onClick={onClose} disabled={submitting}>
             Annuler
           </Button>
-          <Button type="submit" form="medicine-form" className="bg-[#2563EB] text-white hover:bg-[#1D4ED8]">
+          <Button type="submit" form="medicine-form" disabled={submitting} className="bg-[#2563EB] text-white hover:bg-[#1D4ED8]">
+            {submitting && <LoaderCircle className="size-4 animate-spin" />}
             {medicine ? "Enregistrer" : "Ajouter"}
           </Button>
         </>
@@ -172,6 +195,13 @@ export default function MedicineForm({ medicine, onClose, onSaved, fromEntry = f
             ? "Le stock sera ajouté par l'entrée que vous êtes en train d'enregistrer."
             : "Le stock évolue ensuite avec les entrées et les sorties. Le stock initial ci-dessous est facultatif."}
         </div>
+
+        {formError && (
+          <div role="alert" className="flex items-start gap-2.5 rounded-xl border border-[#EF4444]/30 bg-[#EF4444]/10 px-4 py-3 text-sm text-[#B91C1C] sm:col-span-2">
+            <CircleAlert className="mt-0.5 size-4 shrink-0" />
+            {formError}
+          </div>
+        )}
 
         <div className="space-y-1.5">
           <Label htmlFor="nom">Nom du médicament</Label>
@@ -187,7 +217,14 @@ export default function MedicineForm({ medicine, onClose, onSaved, fromEntry = f
 
         <div className="space-y-1.5">
           <Label htmlFor="categorie">Catégorie</Label>
-          <SelectField id="categorie" value={values.categorie} onChange={set("categorie")} placeholder="Sélectionner une catégorie" options={CATEGORIES} invalid={!!errors.categorie} />
+          <SelectField
+            id="categorie"
+            value={values.categorie}
+            onChange={set("categorie")}
+            placeholder={loadingCategories ? "Chargement des catégories..." : "Sélectionner une catégorie"}
+            options={categories.map((c) => c.nom)}
+            invalid={!!errors.categorie}
+          />
           <FieldError message={errors.categorie} />
         </div>
 

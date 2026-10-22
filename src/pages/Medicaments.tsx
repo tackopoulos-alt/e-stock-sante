@@ -6,9 +6,10 @@ import DeleteMedicineDialog from "@/components/medicaments/DeleteMedicineDialog"
 import MedicineDetails from "@/components/medicaments/MedicineDetails"
 import MedicineForm from "@/components/medicaments/MedicineForm"
 import RowMenu from "@/components/medicaments/RowMenu"
+import { PageError, PageLoading } from "@/components/common/PageState"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { useData } from "@/context/DataContext"
+import { useMedicines } from "@/lib/queries"
 import { getLevel, type StockLevel } from "@/lib/stock"
 import { cn } from "@/lib/utils"
 import type { Medicine } from "@/lib/types"
@@ -36,7 +37,7 @@ function FilterSelect({ label, value, onChange, children }: { label: string; val
 }
 
 export default function Medicaments() {
-  const { medicines } = useData()
+  const { medicines, loading, error, reload } = useMedicines()
   const navigate = useNavigate()
   const [search, setSearch] = useState("")
   const [categorie, setCategorie] = useState(ALL)
@@ -103,178 +104,186 @@ export default function Medicaments() {
         </Button>
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        {cards.map(({ key, label, value, icon: Icon, tone }) => (
-          <button
-            key={key}
-            type="button"
-            onClick={() => {
-              setEtat(key === ALL || etat === key ? ALL : key)
-              setPage(1)
-            }}
-            className={cn(
-              "flex items-center gap-3 rounded-2xl border bg-white p-4 text-left shadow-sm transition-colors hover:border-[#2563EB]/40",
-              etat === key || (key === ALL && etat === ALL) ? "border-[#2563EB] ring-1 ring-[#2563EB]/30" : "border-[#E2E8F0]",
+      {loading ? (
+        <PageLoading />
+      ) : error ? (
+        <PageError error={error} onRetry={reload} />
+      ) : (
+        <>
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            {cards.map(({ key, label, value, icon: Icon, tone }) => (
+              <button
+                key={key}
+                type="button"
+                onClick={() => {
+                  setEtat(key === ALL || etat === key ? ALL : key)
+                  setPage(1)
+                }}
+                className={cn(
+                  "flex items-center gap-3 rounded-2xl border bg-white p-4 text-left shadow-sm transition-colors hover:border-[#2563EB]/40",
+                  etat === key || (key === ALL && etat === ALL) ? "border-[#2563EB] ring-1 ring-[#2563EB]/30" : "border-[#E2E8F0]",
+                )}
+              >
+                <div className={cn("flex size-10 shrink-0 items-center justify-center rounded-full", tone)}>
+                  <Icon className="size-5" />
+                </div>
+                <div>
+                  <p className="text-sm text-[#64748B]">{label}</p>
+                  <p className="text-2xl font-bold leading-tight text-[#0F2747]">{value}</p>
+                </div>
+              </button>
+            ))}
+          </div>
+
+          <div className="mt-5 rounded-2xl border border-[#E2E8F0] bg-white shadow-sm">
+            <div className="space-y-3 border-b border-[#E2E8F0] p-4">
+              <div className="relative">
+                <Search className="pointer-events-none absolute left-4 top-1/2 size-[18px] -translate-y-1/2 text-[#64748B]" />
+                <Input
+                  value={search}
+                  onChange={(e) => {
+                    setSearch(e.target.value)
+                    setPage(1)
+                  }}
+                  placeholder="Rechercher par nom, référence ou laboratoire..."
+                  className="h-11 rounded-xl border-[#E2E8F0] bg-white pl-11"
+                />
+              </div>
+
+              <div className="grid gap-3 sm:grid-cols-3">
+                <FilterSelect label="Catégorie" value={categorie} onChange={(v) => { setCategorie(v); setPage(1) }}>
+                  <option value={ALL}>Toutes les catégories</option>
+                  {categories.map((c) => (
+                    <option key={c} value={c}>{c}</option>
+                  ))}
+                </FilterSelect>
+                <FilterSelect label="Forme" value={forme} onChange={(v) => { setForme(v); setPage(1) }}>
+                  <option value={ALL}>Toutes les formes</option>
+                  {formes.map((f) => (
+                    <option key={f} value={f}>{f}</option>
+                  ))}
+                </FilterSelect>
+                <FilterSelect label="État du stock" value={etat} onChange={(v) => { setEtat(v as StockLevel | typeof ALL); setPage(1) }}>
+                  <option value={ALL}>Tous les états</option>
+                  <option value="normal">Normal</option>
+                  <option value="faible">Stock faible</option>
+                  <option value="rupture">Rupture</option>
+                </FilterSelect>
+              </div>
+
+              {hasFilters && (
+                <button type="button" onClick={reset} className="text-sm font-medium text-[#2563EB] hover:underline">
+                  Réinitialiser les filtres
+                </button>
+              )}
+            </div>
+
+            {filtered.length === 0 ? (
+              <div className="flex flex-col items-center px-6 py-14 text-center">
+                <SearchX className="size-9 text-[#64748B]" />
+                <p className="mt-3 font-semibold text-[#0F2747]">Aucun médicament trouvé</p>
+                <p className="mt-1 text-sm text-[#64748B]">Modifiez votre recherche ou vos filtres.</p>
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[820px] text-sm">
+                  <thead>
+                    <tr className="bg-[#F8FAFC] text-left text-xs text-[#64748B]">
+                      <th className="px-4 py-3 font-medium">Médicament</th>
+                      <th className="px-4 py-3 font-medium">Référence</th>
+                      <th className="px-4 py-3 font-medium">Catégorie</th>
+                      <th className="px-4 py-3 font-medium">Dosage</th>
+                      <th className="px-4 py-3 font-medium">Forme</th>
+                      <th className="px-4 py-3 text-right font-medium">Stock</th>
+                      <th className="px-4 py-3 text-right font-medium">Seuil</th>
+                      <th className="px-4 py-3 font-medium">État</th>
+                      <th className="px-4 py-3 text-right font-medium">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {visible.map((m) => (
+                      <tr
+                        key={m.id}
+                        onClick={() => setSelectedId(m.id)}
+                        className="cursor-pointer border-t border-[#E2E8F0] hover:bg-[#F8FAFC]"
+                      >
+                        <td className="px-4 py-3.5 font-semibold text-[#0F2747]">{m.nom}</td>
+                        <td className="px-4 py-3.5 text-[#64748B]">{m.reference}</td>
+                        <td className="px-4 py-3.5 text-[#172033]">{m.categorie}</td>
+                        <td className="px-4 py-3.5 text-[#172033]">{m.dosage}</td>
+                        <td className="px-4 py-3.5 text-[#172033]">{m.forme}</td>
+                        <td className="px-4 py-3.5 text-right font-bold text-[#0F2747]">{m.quantite}</td>
+                        <td className="px-4 py-3.5 text-right text-[#64748B]">{m.seuilMin}</td>
+                        <td className="px-4 py-3.5">
+                          <LevelBadge level={getLevel(m)} />
+                        </td>
+                        <td className="px-4 py-2 text-right">
+                          <RowMenu
+                            label={m.nom}
+                            onView={() => setSelectedId(m.id)}
+                            onEdit={() => setEditing(m)}
+                            onStock={() => navigate(`/stocks?medicament=${m.id}`)}
+                            onHistory={() => navigate(`/historique?medicament=${m.id}`)}
+                            onDelete={() => setDeleting(m)}
+                          />
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             )}
-          >
-            <div className={cn("flex size-10 shrink-0 items-center justify-center rounded-full", tone)}>
-              <Icon className="size-5" />
-            </div>
-            <div>
-              <p className="text-sm text-[#64748B]">{label}</p>
-              <p className="text-2xl font-bold leading-tight text-[#0F2747]">{value}</p>
-            </div>
-          </button>
-        ))}
-      </div>
 
-      <div className="mt-5 rounded-2xl border border-[#E2E8F0] bg-white shadow-sm">
-        <div className="space-y-3 border-b border-[#E2E8F0] p-4">
-          <div className="relative">
-            <Search className="pointer-events-none absolute left-4 top-1/2 size-[18px] -translate-y-1/2 text-[#64748B]" />
-            <Input
-              value={search}
-              onChange={(e) => {
-                setSearch(e.target.value)
-                setPage(1)
-              }}
-              placeholder="Rechercher par nom, référence ou laboratoire..."
-              className="h-11 rounded-xl border-[#E2E8F0] bg-white pl-11"
-            />
-          </div>
-
-          <div className="grid gap-3 sm:grid-cols-3">
-            <FilterSelect label="Catégorie" value={categorie} onChange={(v) => { setCategorie(v); setPage(1) }}>
-              <option value={ALL}>Toutes les catégories</option>
-              {categories.map((c) => (
-                <option key={c} value={c}>{c}</option>
-              ))}
-            </FilterSelect>
-            <FilterSelect label="Forme" value={forme} onChange={(v) => { setForme(v); setPage(1) }}>
-              <option value={ALL}>Toutes les formes</option>
-              {formes.map((f) => (
-                <option key={f} value={f}>{f}</option>
-              ))}
-            </FilterSelect>
-            <FilterSelect label="État du stock" value={etat} onChange={(v) => { setEtat(v as StockLevel | typeof ALL); setPage(1) }}>
-              <option value={ALL}>Tous les états</option>
-              <option value="normal">Normal</option>
-              <option value="faible">Stock faible</option>
-              <option value="rupture">Rupture</option>
-            </FilterSelect>
-          </div>
-
-          {hasFilters && (
-            <button type="button" onClick={reset} className="text-sm font-medium text-[#2563EB] hover:underline">
-              Réinitialiser les filtres
-            </button>
-          )}
-        </div>
-
-        {filtered.length === 0 ? (
-          <div className="flex flex-col items-center px-6 py-14 text-center">
-            <SearchX className="size-9 text-[#64748B]" />
-            <p className="mt-3 font-semibold text-[#0F2747]">Aucun médicament trouvé</p>
-            <p className="mt-1 text-sm text-[#64748B]">Modifiez votre recherche ou vos filtres.</p>
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[820px] text-sm">
-              <thead>
-                <tr className="bg-[#F8FAFC] text-left text-xs text-[#64748B]">
-                  <th className="px-4 py-3 font-medium">Médicament</th>
-                  <th className="px-4 py-3 font-medium">Référence</th>
-                  <th className="px-4 py-3 font-medium">Catégorie</th>
-                  <th className="px-4 py-3 font-medium">Dosage</th>
-                  <th className="px-4 py-3 font-medium">Forme</th>
-                  <th className="px-4 py-3 text-right font-medium">Stock</th>
-                  <th className="px-4 py-3 text-right font-medium">Seuil</th>
-                  <th className="px-4 py-3 font-medium">État</th>
-                  <th className="px-4 py-3 text-right font-medium">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {visible.map((m) => (
-                  <tr
-                    key={m.id}
-                    onClick={() => setSelectedId(m.id)}
-                    className="cursor-pointer border-t border-[#E2E8F0] hover:bg-[#F8FAFC]"
-                  >
-                    <td className="px-4 py-3.5 font-semibold text-[#0F2747]">{m.nom}</td>
-                    <td className="px-4 py-3.5 text-[#64748B]">{m.reference}</td>
-                    <td className="px-4 py-3.5 text-[#172033]">{m.categorie}</td>
-                    <td className="px-4 py-3.5 text-[#172033]">{m.dosage}</td>
-                    <td className="px-4 py-3.5 text-[#172033]">{m.forme}</td>
-                    <td className="px-4 py-3.5 text-right font-bold text-[#0F2747]">{m.quantite}</td>
-                    <td className="px-4 py-3.5 text-right text-[#64748B]">{m.seuilMin}</td>
-                    <td className="px-4 py-3.5">
-                      <LevelBadge level={getLevel(m)} />
-                    </td>
-                    <td className="px-4 py-2 text-right">
-                      <RowMenu
-                        label={m.nom}
-                        onView={() => setSelectedId(m.id)}
-                        onEdit={() => setEditing(m)}
-                        onStock={() => navigate(`/stocks?medicament=${m.id}`)}
-                        onHistory={() => navigate(`/historique?medicament=${m.id}`)}
-                        onDelete={() => setDeleting(m)}
-                      />
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-
-        {filtered.length > 0 && (
-          <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[#E2E8F0] px-4 py-3 text-sm text-[#64748B]">
-            <span>
-              Affichage {start + 1}–{start + visible.length} sur {filtered.length}
-            </span>
-            {pages > 1 && (
-              <div className="flex items-center gap-1">
-                <button
-                  type="button"
-                  aria-label="Page précédente"
-                  disabled={current === 1}
-                  onClick={() => setPage(current - 1)}
-                  className="flex size-9 items-center justify-center rounded-lg border border-[#E2E8F0] hover:bg-slate-50 disabled:opacity-40"
-                >
-                  <ChevronLeft className="size-4" />
-                </button>
-                {Array.from({ length: pages }, (_, i) => i + 1).map((n) => (
-                  <button
-                    key={n}
-                    type="button"
-                    onClick={() => setPage(n)}
-                    className={cn(
-                      "size-9 rounded-lg text-sm font-medium",
-                      n === current ? "bg-[#2563EB] text-white" : "border border-[#E2E8F0] text-[#172033] hover:bg-slate-50",
-                    )}
-                  >
-                    {n}
-                  </button>
-                ))}
-                <button
-                  type="button"
-                  aria-label="Page suivante"
-                  disabled={current === pages}
-                  onClick={() => setPage(current + 1)}
-                  className="flex size-9 items-center justify-center rounded-lg border border-[#E2E8F0] hover:bg-slate-50 disabled:opacity-40"
-                >
-                  <ChevronRight className="size-4" />
-                </button>
+            {filtered.length > 0 && (
+              <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[#E2E8F0] px-4 py-3 text-sm text-[#64748B]">
+                <span>
+                  Affichage {start + 1}–{start + visible.length} sur {filtered.length}
+                </span>
+                {pages > 1 && (
+                  <div className="flex items-center gap-1">
+                    <button
+                      type="button"
+                      aria-label="Page précédente"
+                      disabled={current === 1}
+                      onClick={() => setPage(current - 1)}
+                      className="flex size-9 items-center justify-center rounded-lg border border-[#E2E8F0] hover:bg-slate-50 disabled:opacity-40"
+                    >
+                      <ChevronLeft className="size-4" />
+                    </button>
+                    {Array.from({ length: pages }, (_, i) => i + 1).map((n) => (
+                      <button
+                        key={n}
+                        type="button"
+                        onClick={() => setPage(n)}
+                        className={cn(
+                          "size-9 rounded-lg text-sm font-medium",
+                          n === current ? "bg-[#2563EB] text-white" : "border border-[#E2E8F0] text-[#172033] hover:bg-slate-50",
+                        )}
+                      >
+                        {n}
+                      </button>
+                    ))}
+                    <button
+                      type="button"
+                      aria-label="Page suivante"
+                      disabled={current === pages}
+                      onClick={() => setPage(current + 1)}
+                      className="flex size-9 items-center justify-center rounded-lg border border-[#E2E8F0] hover:bg-slate-50 disabled:opacity-40"
+                    >
+                      <ChevronRight className="size-4" />
+                    </button>
+                  </div>
+                )}
               </div>
             )}
           </div>
-        )}
-      </div>
+        </>
+      )}
 
       <MedicineDetails medicine={selected} onClose={() => setSelectedId(null)} />
       {adding && <MedicineForm onClose={() => setAdding(false)} />}
       {editing && <MedicineForm key={editing.id} medicine={editing} onClose={() => setEditing(null)} />}
-      <DeleteMedicineDialog medicine={deleting} onClose={() => setDeleting(null)} />
+      {deleting && <DeleteMedicineDialog key={deleting.id} medicine={deleting} onClose={() => setDeleting(null)} />}
     </div>
   )
 }

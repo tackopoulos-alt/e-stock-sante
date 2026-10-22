@@ -1,25 +1,37 @@
-import { OctagonAlert, Trash2 } from "lucide-react"
+import { useState } from "react"
+import { LoaderCircle, OctagonAlert, Trash2 } from "lucide-react"
 import { toast } from "sonner"
 import Modal from "@/components/common/Modal"
 import { Button } from "@/components/ui/button"
-import { useData } from "@/context/DataContext"
+import { ApiError } from "@/lib/api"
+import { deleteMedicine, describeError, useMedicineMovements, useRefreshAfterChange } from "@/lib/queries"
 import { medLabel } from "@/lib/stock"
 import type { Medicine } from "@/lib/types"
 
-export default function DeleteMedicineDialog({ medicine, onClose }: { medicine: Medicine | null; onClose: () => void }) {
-  const { canDeleteMedicine, deleteMedicine } = useData()
-  if (!medicine) return null
+export default function DeleteMedicineDialog({ medicine, onClose }: { medicine: Medicine; onClose: () => void }) {
+  // Un médicament qui a des mouvements ne se supprime pas : on le vérifie avant de proposer le bouton
+  const history = useMedicineMovements(medicine.id, 1)
+  const refresh = useRefreshAfterChange()
+  const [submitting, setSubmitting] = useState(false)
+  // Le serveur a refusé (il a le dernier mot, même si la vérification ci-dessus n'avait rien vu)
+  const [refused, setRefused] = useState(false)
 
-  const blocked = !canDeleteMedicine(medicine.id)
+  const blocked = (history.data?.total ?? 0) > 0 || refused
+  const checking = history.isPending
 
-  const confirm = () => {
-    const result = deleteMedicine(medicine.id)
-    if (!result.ok) {
-      toast.error("Suppression impossible", { description: result.error })
-      return
+  const confirm = async () => {
+    setSubmitting(true)
+    try {
+      await deleteMedicine(medicine.id)
+      void refresh()
+      toast.success("Médicament supprimé", { description: `${medLabel(medicine)} a été retiré du référentiel.` })
+      onClose()
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 409) setRefused(true)
+      else toast.error("Suppression impossible", { description: describeError(err) })
+    } finally {
+      setSubmitting(false)
     }
-    toast.success("Médicament supprimé", { description: `${medLabel(medicine)} a été retiré du référentiel.` })
-    onClose()
   }
 
   return (
@@ -37,8 +49,9 @@ export default function DeleteMedicineDialog({ medicine, onClose }: { medicine: 
             <Button variant="outline" onClick={onClose}>
               Annuler
             </Button>
-            <Button onClick={confirm} className="bg-[#EF4444] text-white hover:bg-[#DC2626]">
-              <Trash2 className="size-4" /> Supprimer
+            <Button onClick={confirm} disabled={checking || submitting} className="bg-[#EF4444] text-white hover:bg-[#DC2626]">
+              {checking || submitting ? <LoaderCircle className="size-4 animate-spin" /> : <Trash2 className="size-4" />}
+              {checking ? "Vérification..." : "Supprimer"}
             </Button>
           </>
         )
