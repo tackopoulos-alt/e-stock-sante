@@ -1,27 +1,20 @@
 import { useState, type FormEvent } from "react"
 import { Link, useNavigate } from "react-router-dom"
 import { FirebaseError } from "firebase/app"
-import { Building2, CircleAlert, Eye, EyeOff, LoaderCircle, UserCog, UserPlus } from "lucide-react"
+import { CircleAlert, Eye, EyeOff, LoaderCircle, UserPlus } from "lucide-react"
 import { toast } from "sonner"
 import AuthLayout from "@/components/layout/AuthLayout"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { useAuth } from "@/context/AuthContext"
 import { authErrorMessage } from "@/lib/authErrors"
 import { cn } from "@/lib/utils"
 
-const structureTypes = ["Centre de Santé", "Poste de Santé", "Hôpital", "Clinique", "Pharmacie hospitalière"]
-const fonctions = ["Gestionnaire de stock", "Agent de santé", "Pharmacien", "Responsable de pharmacie"]
-
 const fieldCls = "h-10 border-[#E2E8F0] bg-white"
-const selectCls = "h-10 w-full border-[#E2E8F0] bg-white data-[size=default]:h-10"
 const eyeCls = "absolute right-3 top-1/2 -translate-y-1/2 text-[#64748B] hover:text-[#172033]"
 
-type FormErrors = Partial<
-  Record<"nom" | "email" | "fonction" | "typeStructure" | "nomStructure" | "password" | "confirm", string>
->
+type FormErrors = Partial<Record<"nom" | "email" | "password" | "confirm", string>>
 
 function FieldError({ message }: { message?: string }) {
   if (!message) return null
@@ -38,10 +31,6 @@ export default function Register() {
   const { signUpWithEmail } = useAuth()
   const [nom, setNom] = useState("")
   const [email, setEmail] = useState("")
-  const [telephone, setTelephone] = useState("")
-  const [fonction, setFonction] = useState("")
-  const [typeStructure, setTypeStructure] = useState("")
-  const [nomStructure, setNomStructure] = useState("")
   const [password, setPassword] = useState("")
   const [confirm, setConfirm] = useState("")
   const [showPwd, setShowPwd] = useState(false)
@@ -61,10 +50,6 @@ export default function Register() {
     if (!email.trim()) next.email = "Saisissez votre adresse e-mail."
     else if (!/^\S+@\S+\.\S+$/.test(email.trim())) next.email = "Saisissez une adresse e-mail valide."
 
-    if (!fonction) next.fonction = "Sélectionnez votre fonction."
-    if (!typeStructure) next.typeStructure = "Sélectionnez le type de structure."
-    if (!nomStructure.trim()) next.nomStructure = "Saisissez le nom de la structure."
-
     if (password.length < 6) next.password = "Le mot de passe doit contenir au moins 6 caractères."
 
     if (!confirm) next.confirm = "Confirmez votre mot de passe."
@@ -78,7 +63,7 @@ export default function Register() {
     try {
       await signUpWithEmail(nom, email, password)
       toast.success("Compte créé", {
-        description: "Bienvenue sur e-Stock Santé. Un e-mail de vérification vous a été envoyé.",
+        description: "Un e-mail de vérification vous a été envoyé : cliquez sur le lien, puis revenez sur le site.",
       })
       navigate("/dashboard")
     } catch (err) {
@@ -98,7 +83,7 @@ export default function Register() {
     <AuthLayout
       wide
       title="Créer un compte"
-      subtitle="Renseignez vos informations pour accéder à la plateforme."
+      subtitle="Créez votre compte. Vous indiquerez votre structure à l'étape suivante."
     >
       <form className="grid gap-x-4 gap-y-3 sm:grid-cols-2" onSubmit={handleSubmit} noValidate>
         {formError && (
@@ -136,65 +121,6 @@ export default function Register() {
             className={cn(fieldCls, errors.email && "border-[#EF4444]")}
           />
           <FieldError message={errors.email} />
-        </div>
-
-        <div className="space-y-1.5">
-          <Label htmlFor="telephone" className="text-[#172033]">
-            Téléphone <span className="font-normal text-[#64748B]">(facultatif)</span>
-          </Label>
-          <Input
-            id="telephone"
-            type="tel"
-            placeholder="+221 ..."
-            value={telephone}
-            onChange={(e) => setTelephone(e.target.value)}
-            className={fieldCls}
-          />
-        </div>
-
-        <div className="space-y-1.5">
-          <Label className="text-[#172033]">Fonction</Label>
-          <Select value={fonction} onValueChange={(v) => { setFonction(v ?? ""); clear("fonction") }}>
-            <SelectTrigger aria-invalid={!!errors.fonction} className={cn(selectCls, errors.fonction && "border-[#EF4444]")}>
-              <UserCog className="size-4 text-[#64748B]" />
-              <SelectValue placeholder="Sélectionnez votre rôle" />
-            </SelectTrigger>
-            <SelectContent>
-              {fonctions.map((f) => (
-                <SelectItem key={f} value={f}>{f}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <FieldError message={errors.fonction} />
-        </div>
-
-        <div className="space-y-1.5">
-          <Label className="text-[#172033]">Type de structure</Label>
-          <Select value={typeStructure} onValueChange={(v) => { setTypeStructure(v ?? ""); clear("typeStructure") }}>
-            <SelectTrigger aria-invalid={!!errors.typeStructure} className={cn(selectCls, errors.typeStructure && "border-[#EF4444]")}>
-              <Building2 className="size-4 text-[#64748B]" />
-              <SelectValue placeholder="Choisir un type" />
-            </SelectTrigger>
-            <SelectContent>
-              {structureTypes.map((t) => (
-                <SelectItem key={t} value={t}>{t}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <FieldError message={errors.typeStructure} />
-        </div>
-
-        <div className="space-y-1.5">
-          <Label htmlFor="nomStructure" className="text-[#172033]">Nom de la structure</Label>
-          <Input
-            id="nomStructure"
-            placeholder="Hôpital Régional de Saint-Louis"
-            value={nomStructure}
-            onChange={(e) => { setNomStructure(e.target.value); clear("nomStructure") }}
-            aria-invalid={!!errors.nomStructure}
-            className={cn(fieldCls, errors.nomStructure && "border-[#EF4444]")}
-          />
-          <FieldError message={errors.nomStructure} />
         </div>
 
         <div className="space-y-1.5">
