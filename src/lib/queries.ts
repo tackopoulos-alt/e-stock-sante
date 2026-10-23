@@ -24,6 +24,7 @@ export const keys = {
   medicine: (id: string) => ["medicines", id] as const,
   categories: ["categories"] as const,
   movements: (filters: object) => ["movements", filters] as const,
+  alerts: (filters: object) => ["alerts", filters] as const,
 }
 
 // Un message en français pour n'importe quelle erreur (les messages de validation du serveur sont en anglais)
@@ -118,6 +119,35 @@ export function toMedicine(m: ApiMedicine): Medicine {
   }
 }
 
+// Une alerte telle que le serveur la décrit
+export interface ApiAlert {
+  id: string
+  type: "rupture" | "faible" | "peremption"
+  niveau: "critique" | "avertissement"
+  statut: "active" | "prise_en_compte"
+  message: string
+  createdAt: string
+  acknowledgedAt: string | null
+  acknowledgedBy: { id: string; nom: string } | null
+  medicine: { id: string; nom: string; dosage: string; reference: string }
+  lot: { id: string; numero: string; dateExpiration: string | null } | null
+}
+
+// Les filtres de la liste des alertes
+export interface AlertFilters {
+  type?: ApiAlert["type"]
+  niveau?: ApiAlert["niveau"]
+  statut?: ApiAlert["statut"]
+  search?: string
+  page?: number
+  limit?: number
+}
+
+// La liste, avec les compteurs des cartes (toutes les alertes en cours, sans filtre)
+export interface AlertsPage extends Page<ApiAlert> {
+  summary: { total: number; rupture: number; faible: number; peremption: number }
+}
+
 // L'historique, avec son résumé (nombre d'opérations, unités entrées, unités sorties) et les auteurs possibles du filtre
 export interface MovementsPage extends Page<ApiHistoryItem> {
   summary: { operations: number; entrees: number; sorties: number }
@@ -157,6 +187,14 @@ export const fetchMedicineMovements = (id: string, limit: number) =>
   apiFetch<Page<ApiMovement>>("/movements", { query: { medicineId: id, limit } })
 
 export const fetchMovements = (filters: MovementFilters) => apiFetch<MovementsPage>("/movements", { query: { ...filters } })
+
+export const fetchAlerts = (filters: AlertFilters) => apiFetch<AlertsPage>("/alerts", { query: { ...filters } })
+
+// « Prendre en compte » : le serveur note la personne connectée, l'alerte reste affichée
+export const acknowledgeAlert = (id: string) => apiFetch<ApiAlert>(`/alerts/${id}/acknowledge`, { method: "PATCH" })
+
+// « Annuler » : l'alerte redevient active
+export const reactivateAlert = (id: string) => apiFetch<ApiAlert>(`/alerts/${id}/reactivate`, { method: "PATCH" })
 
 export const createMovement = (type: "entree" | "sortie", input: MovementInput) =>
   apiFetch<MovementResult>(`/movements/${type}`, { method: "POST", body: input })
@@ -228,6 +266,15 @@ export function useMovements(filters: MovementFilters, enabled = true) {
     queryKey: keys.movements(filters),
     queryFn: () => fetchMovements(filters),
     enabled,
+    placeholderData: keepPreviousData,
+  })
+}
+
+// Les alertes en cours, filtrées et paginées par le serveur
+export function useAlerts(filters: AlertFilters) {
+  return useQuery({
+    queryKey: keys.alerts(filters),
+    queryFn: () => fetchAlerts(filters),
     placeholderData: keepPreviousData,
   })
 }

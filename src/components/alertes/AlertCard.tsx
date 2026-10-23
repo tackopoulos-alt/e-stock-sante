@@ -1,8 +1,8 @@
-import { Check, CalendarClock, PackageX, TriangleAlert, Undo2 } from "lucide-react"
+import { Check, CalendarClock, LoaderCircle, PackageX, TriangleAlert, Undo2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { timeAgo } from "@/lib/format"
-import { medLabel, type Alert, type AlertType } from "@/lib/stock"
-import type { Medicine } from "@/lib/types"
+import type { ApiAlert } from "@/lib/queries"
+import { medLabel, type AlertType } from "@/lib/stock"
 import { cn } from "@/lib/utils"
 
 const types: Record<AlertType, { icon: typeof PackageX; label: string }> = {
@@ -12,18 +12,19 @@ const types: Record<AlertType, { icon: typeof PackageX; label: string }> = {
 }
 
 interface AlertCardProps {
-  alert: Alert
-  medicine: Medicine
-  acknowledged: boolean
+  alert: ApiAlert
+  // Une demande est en cours pour cette alerte : le bouton « Prendre en compte » attend
+  busy: boolean
   onRestock: () => void
   onViewStock: () => void
   onViewDetails: () => void
   onToggle: () => void
 }
 
-export default function AlertCard({ alert, medicine, acknowledged, onRestock, onViewStock, onViewDetails, onToggle }: AlertCardProps) {
+export default function AlertCard({ alert, busy, onRestock, onViewStock, onViewDetails, onToggle }: AlertCardProps) {
   const { icon: Icon, label } = types[alert.type]
   const critique = alert.niveau === "critique"
+  const acknowledged = alert.statut === "prise_en_compte"
 
   return (
     <div
@@ -44,7 +45,7 @@ export default function AlertCard({ alert, medicine, acknowledged, onRestock, on
 
       <div className="min-w-0 flex-1 basis-64">
         <div className="flex flex-wrap items-center gap-2">
-          <p className="font-semibold text-[#0F2747]">{medLabel(medicine)}</p>
+          <p className="font-semibold text-[#0F2747]">{medLabel(alert.medicine)}</p>
           <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-medium text-[#475569]">{label}</span>
           <span
             className={cn(
@@ -63,7 +64,10 @@ export default function AlertCard({ alert, medicine, acknowledged, onRestock, on
           )}
         </div>
         <p className="mt-1 text-sm text-[#475569]">{alert.message}</p>
-        <p className="mt-0.5 text-xs text-[#64748B]">{timeAgo(alert.date)}</p>
+        <p className="mt-0.5 text-xs text-[#64748B]">
+          {timeAgo(alert.createdAt)}
+          {acknowledged && alert.acknowledgedBy && ` · Prise en compte par ${alert.acknowledgedBy.nom}`}
+        </p>
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
@@ -79,8 +83,10 @@ export default function AlertCard({ alert, medicine, acknowledged, onRestock, on
         <Button type="button" variant="outline" onClick={onViewStock} className="h-9">
           Voir le stock
         </Button>
-        <Button type="button" variant="ghost" onClick={onToggle} className="h-9 text-[#475569]">
-          {acknowledged ? (
+        <Button type="button" variant="ghost" onClick={onToggle} disabled={busy} className="h-9 text-[#475569]">
+          {busy ? (
+            <LoaderCircle className="size-4 animate-spin" />
+          ) : acknowledged ? (
             <>
               <Undo2 className="size-4" /> Annuler
             </>
