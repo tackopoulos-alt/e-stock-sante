@@ -63,7 +63,7 @@ export default function Sidebar({ open, onClose, alertCount }: SidebarProps) {
         </div>
 
         <nav className="flex-1 space-y-1.5 overflow-y-auto px-4">
-          {links.map(({ to, label, icon: Icon }) => (
+          {links.filter(({ to }) => to !== "/utilisateurs" || profile?.role === "admin").map(({ to, label, icon: Icon }) => (
             <NavLink
               key={to}
               to={to}

@@ -26,6 +26,7 @@ export const keys = {
   movements: (filters: object) => ["movements", filters] as const,
   alerts: (filters: object) => ["alerts", filters] as const,
   dashboard: ["dashboard"] as const,
+  users: (filters: object) => ["users", filters] as const,
 }
 
 // Un message en français pour n'importe quelle erreur (les messages de validation du serveur sont en anglais)
@@ -149,6 +150,51 @@ export interface AlertsPage extends Page<ApiAlert> {
   summary: { total: number; rupture: number; faible: number; peremption: number }
 }
 
+// Un utilisateur tel que le serveur le décrit (la liste ajoute le nombre d'opérations de chaque personne)
+export interface ApiUser {
+  id: string
+  nom: string
+  email: string
+  telephone: string | null
+  fonction: string
+  role: "admin" | "gestionnaire"
+  statut: "actif" | "en_attente" | "inactif"
+  aDejaUnCompte: boolean
+  structure: { id: string; nom: string; type: string }
+  createdAt: string
+}
+
+export interface ApiUserRow extends ApiUser {
+  operations: number
+}
+
+// Les filtres de la liste des utilisateurs
+export interface UserFilters {
+  role?: ApiUser["role"]
+  statut?: ApiUser["statut"]
+  search?: string
+  page?: number
+  limit?: number
+}
+
+// La liste, avec les compteurs des cartes (qui suivent la recherche, mais pas les filtres de rôle et de statut)
+export interface UsersPage extends Page<ApiUserRow> {
+  summary: { total: number; actifs: number; administrateurs: number; enAttente: number }
+}
+
+// Ce qu'on envoie pour modifier un utilisateur (l'adresse e-mail ne se modifie pas)
+export interface UserInput {
+  nom: string
+  telephone?: string
+  fonction: string
+  role: ApiUser["role"]
+  statut: ApiUser["statut"]
+}
+
+export interface NewUserInput extends UserInput {
+  email: string
+}
+
 // Tout le tableau de bord, en un seul appel
 export interface ApiDashboard {
   stats: {
@@ -223,6 +269,14 @@ export const acknowledgeAlert = (id: string) => apiFetch<ApiAlert>(`/alerts/${id
 
 // « Annuler » : l'alerte redevient active
 export const reactivateAlert = (id: string) => apiFetch<ApiAlert>(`/alerts/${id}/reactivate`, { method: "PATCH" })
+
+export const fetchUsers = (filters: UserFilters) => apiFetch<UsersPage>("/users", { query: { ...filters } })
+
+export const createUser = (input: NewUserInput) => apiFetch<ApiUser>("/users", { method: "POST", body: input })
+
+export const updateUser = (id: string, input: Partial<UserInput>) => apiFetch<ApiUser>(`/users/${id}`, { method: "PATCH", body: input })
+
+export const deleteUser = (id: string) => apiFetch<void>(`/users/${id}`, { method: "DELETE" })
 
 export const fetchDashboard = () => apiFetch<ApiDashboard>("/dashboard")
 
@@ -312,4 +366,21 @@ export function useAlerts(filters: AlertFilters) {
 // Le tableau de bord : un seul appel, partagé par tous les blocs de la page
 export function useDashboard() {
   return useQuery({ queryKey: keys.dashboard, queryFn: fetchDashboard })
+}
+
+// Les utilisateurs de la structure (réservé aux administrateurs), filtrés et paginés par le serveur.
+// « enabled » reste faux pour un gestionnaire : on ne demande rien qui serait refusé.
+export function useUsers(filters: UserFilters, enabled = true) {
+  return useQuery({
+    queryKey: keys.users(filters),
+    queryFn: () => fetchUsers(filters),
+    enabled,
+    placeholderData: keepPreviousData,
+  })
+}
+
+// Après un changement d'utilisateur : la liste, et les chiffres « utilisateurs » du tableau de bord
+export function useRefreshUsers() {
+  const queryClient = useQueryClient()
+  return () => Promise.all(["users", "dashboard"].map((key) => queryClient.invalidateQueries({ queryKey: [key] })))
 }

@@ -1,74 +1,100 @@
-import { OctagonAlert, Trash2 } from "lucide-react"
+import { useState } from "react"
+import { LoaderCircle, OctagonAlert, Trash2 } from "lucide-react"
 import { toast } from "sonner"
 import Modal from "@/components/common/Modal"
 import { Button } from "@/components/ui/button"
-import { useData } from "@/context/DataContext"
-import type { User } from "@/lib/types"
+import { ApiError } from "@/lib/api"
+import { deleteUser, describeError, updateUser, useRefreshUsers, type ApiUserRow } from "@/lib/queries"
+import { useProfile } from "@/lib/useProfile"
 
-export default function DeleteUserDialog({ user, onClose }: { user: User | null; onClose: () => void }) {
-  const { deletionBlock, deleteUser, setUserStatus } = useData()
-  if (!user) return null
+export default function DeleteUserDialog({ user, onClose }: { user: ApiUserRow; onClose: () => void }) {
+  const profile = useProfile()
+  const refresh = useRefreshUsers()
+  const [busy, setBusy] = useState(false)
+  // Le serveur a refusé (il a le dernier mot : par exemple « il doit rester un administrateur actif »)
+  const [refusal, setRefusal] = useState<string | null>(null)
 
-  const block = deletionBlock(user.id)
+  const isSelf = user.id === profile?.id
+  const hasOperations = user.operations > 0
 
-  const confirm = () => {
-    const result = deleteUser(user.id)
-    if (!result.ok) {
-      toast.error("Suppression impossible", { description: result.error })
-      return
+  // Ce qui empêche la suppression, dit avant même de proposer le bouton
+  const reason = isSelf
+    ? "vous ne pouvez pas supprimer votre propre compte."
+    : hasOperations
+      ? `a déjà ${user.operations} opération${user.operations > 1 ? "s" : ""} dans l'historique : pour garder la traçabilité, ce compte ne peut pas être supprimé.`
+      : refusal
+  const canDeactivate = !isSelf && hasOperations && user.statut !== "inactif"
+
+  const confirm = async () => {
+    setBusy(true)
+    try {
+      await deleteUser(user.id)
+      void refresh()
+      toast.success("Utilisateur supprimé", { description: `Le compte de ${user.nom} a été supprimé.` })
+      onClose()
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 409) setRefusal(err.message)
+      else toast.error("Suppression impossible", { description: describeError(err) })
+    } finally {
+      setBusy(false)
     }
-    toast.success("Utilisateur supprimé", { description: `Le compte de ${user.nom} a été supprimé.` })
-    onClose()
   }
 
   // Un compte qui a des opérations ne peut pas disparaître : on propose de le désactiver
-  const deactivate = () => {
-    const result = setUserStatus(user.id, "inactif")
-    if (!result.ok) {
-      toast.error("Action impossible", { description: result.error })
-      return
+  const deactivate = async () => {
+    setBusy(true)
+    try {
+      await updateUser(user.id, { statut: "inactif" })
+      void refresh()
+      toast.success("Compte désactivé", { description: `${user.nom} ne peut plus se connecter.` })
+      onClose()
+    } catch (err) {
+      toast.error("Action impossible", { description: describeError(err) })
+    } finally {
+      setBusy(false)
     }
-    toast.success("Compte désactivé", { description: `${user.nom} ne peut plus se connecter.` })
-    onClose()
   }
 
   return (
     <Modal
       open
       onClose={onClose}
-      title={block ? "Suppression impossible" : "Supprimer cet utilisateur ?"}
+      title={reason ? "Suppression impossible" : "Supprimer cet utilisateur ?"}
       footer={
-        block ? (
+        reason ? (
           <>
             <Button variant="outline" onClick={onClose}>
               Compris
             </Button>
-            {block.code === "operations" && user.statut !== "inactif" && (
-              <Button onClick={deactivate} className="bg-[#2563EB] text-white hover:bg-[#1D4ED8]">
+            {canDeactivate && (
+              <Button onClick={deactivate} disabled={busy} className="bg-[#2563EB] text-white hover:bg-[#1D4ED8]">
+                {busy && <LoaderCircle className="size-4 animate-spin" />}
                 Désactiver ce compte
               </Button>
             )}
           </>
         ) : (
           <>
-            <Button variant="outline" onClick={onClose}>
+            <Button variant="outline" onClick={onClose} disabled={busy}>
               Annuler
             </Button>
-            <Button onClick={confirm} className="bg-[#EF4444] text-white hover:bg-[#DC2626]">
-              <Trash2 className="size-4" /> Supprimer
+            <Button onClick={confirm} disabled={busy} className="bg-[#EF4444] text-white hover:bg-[#DC2626]">
+              {busy ? <LoaderCircle className="size-4 animate-spin" /> : <Trash2 className="size-4" />} Supprimer
             </Button>
           </>
         )
       }
     >
-      {block ? (
+      {reason ? (
         <div className="flex items-start gap-3">
           <OctagonAlert className="mt-0.5 size-6 shrink-0 text-[#F59E0B]" />
           <div className="space-y-2 text-sm text-[#172033]">
             <p>
-              <span className="font-semibold">{user.nom}</span> : {block.message}
+              <span className="font-semibold">{user.nom}</span> : {reason}
             </p>
-            {block.code === "operations" && <p className="text-[#64748B]">Vous pouvez désactiver son compte à la place : il ne pourra plus se connecter, et son historique est conservé.</p>}
+            {canDeactivate && (
+              <p className="text-[#64748B]">Vous pouvez désactiver son compte à la place : il ne pourra plus se connecter, et son historique est conservé.</p>
+            )}
           </div>
         </div>
       ) : (
