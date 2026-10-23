@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from "react"
-import { ArrowRight, ChevronDown, CircleAlert, Plus } from "lucide-react"
+import { ArrowRight, ChevronDown, CircleAlert, LoaderCircle, Plus } from "lucide-react"
 import { toast } from "sonner"
 import LevelBadge from "@/components/common/LevelBadge"
 import Modal from "@/components/common/Modal"
@@ -7,8 +7,9 @@ import MedicineForm from "@/components/medicaments/MedicineForm"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { useData } from "@/context/DataContext"
+import { ApiError } from "@/lib/api"
 import { todayInputValue } from "@/lib/format"
+import { createMovement, describeError, useMedicines, useRefreshAfterChange } from "@/lib/queries"
 import { getLevel, medLabel } from "@/lib/stock"
 import type { MovementType } from "@/lib/types"
 import { cn } from "@/lib/utils"
@@ -65,7 +66,8 @@ interface MovementDialogProps {
 }
 
 export default function MovementDialog({ type, medicineId, onClose }: MovementDialogProps) {
-  const { medicines, addMovement } = useData()
+  const { medicines } = useMedicines()
+  const refresh = useRefreshAfterChange()
   const entree = type === "entree"
 
   const [id, setId] = useState(medicineId ?? "")
@@ -77,6 +79,8 @@ export default function MovementDialog({ type, medicineId, onClose }: MovementDi
   const [motif, setMotif] = useState(SORTIE_MOTIFS[0])
   const [errors, setErrors] = useState<Errors>({})
   const [creating, setCreating] = useState(false)
+  const [submitting, setSubmitting] = useState(false)
+  const [formError, setFormError] = useState("")
 
   const sorted = [...medicines].sort((a, b) => a.nom.localeCompare(b.nom, "fr"))
   const medicine = medicines.find((m) => m.id === id)
@@ -96,7 +100,7 @@ export default function MovementDialog({ type, medicineId, onClose }: MovementDi
 
   const clear = (key: keyof Errors) => setErrors((e) => ({ ...e, [key]: undefined }))
 
-  const submit = (e: FormEvent) => {
+  const submit = async (e: FormEvent) => {
     e.preventDefault()
     const next: Errors = {}
     const today = todayInputValue()
@@ -108,34 +112,40 @@ export default function MovementDialog({ type, medicineId, onClose }: MovementDi
     if (entree && expiration && expiration < today) next.expiration = "Cette date d'expiration est déjà passée."
 
     setErrors(next)
+    setFormError("")
     if (Object.keys(next).length > 0 || liveError || !medicine) return
 
     const before = getLevel(medicine)
-    const result = addMovement({
-      medicineId: medicine.id,
-      type,
-      quantite: qty,
-      date,
-      motif: entree ? (ENTREE_MOTIF[provenance] ?? "Réapprovisionnement") : motif,
-      lot,
-      expiration,
-      provenance,
-    })
-    if (!result.ok) {
-      setErrors({ quantite: result.error })
-      return
-    }
+    setSubmitting(true)
+    try {
+      const result = await createMovement(type, {
+        medicineId: medicine.id,
+        quantite: qty,
+        date,
+        motif: entree ? (ENTREE_MOTIF[provenance] ?? "Réapprovisionnement") : motif,
+        // Le lot, l'expiration et la provenance ne concernent que les entrées
+        ...(entree ? { numeroLot: lot.trim() || undefined, dateExpiration: expiration || undefined, provenance: provenance || undefined } : {}),
+      })
 
-    const newStock = medicine.quantite + (entree ? qty : -qty)
-    const afterLevel = getLevel({ quantite: newStock, seuilMin: medicine.seuilMin })
-    let description = `${medLabel(medicine)} : stock ${medicine.quantite} → ${newStock}.`
-    if (afterLevel !== "normal" && afterLevel !== before) {
-      description += afterLevel === "rupture" ? " Rupture de stock : une alerte a été générée." : " Stock sous le seuil : une alerte a été générée."
-    }
-    if (before !== "normal" && afterLevel === "normal") description += " L'alerte de stock est levée."
+      // Le serveur donne le stock réel après l'opération
+      const newStock = result.medicine.quantite
+      const afterLevel = getLevel({ quantite: newStock, seuilMin: medicine.seuilMin })
+      let description = `${medLabel(medicine)} : stock ${medicine.quantite} → ${newStock}.`
+      if (afterLevel !== "normal" && afterLevel !== before) {
+        description += afterLevel === "rupture" ? " Rupture de stock : une alerte a été générée." : " Stock sous le seuil : une alerte a été générée."
+      }
+      if (before !== "normal" && afterLevel === "normal") description += " L'alerte de stock est levée."
 
-    toast.success(entree ? "Entrée enregistrée" : "Sortie enregistrée", { description })
-    onClose()
+      void refresh()
+      toast.success(entree ? "Entrée enregistrée" : "Sortie enregistrée", { description })
+      onClose()
+    } catch (err) {
+      // 409 : par exemple une sortie plus grande que le stock réel (quelqu'un d'autre vient de sortir des unités)
+      if (err instanceof ApiError && err.status === 409) setErrors({ quantite: err.message })
+      else setFormError(describeError(err))
+    } finally {
+      setSubmitting(false)
+    }
   }
 
   return (
@@ -154,15 +164,23 @@ export default function MovementDialog({ type, medicineId, onClose }: MovementDi
             <Button
               type="submit"
               form="movement-form"
-              disabled={!!liveError}
+              disabled={!!liveError || submitting}
               className={cn("text-white", entree ? "bg-[#10B981] hover:bg-[#059669]" : "bg-[#2563EB] hover:bg-[#1D4ED8]")}
             >
+              {submitting && <LoaderCircle className="size-4 animate-spin" />}
               {entree ? "Enregistrer l'entrée" : "Enregistrer la sortie"}
             </Button>
           </>
         }
       >
         <form id="movement-form" onSubmit={submit} noValidate className="grid gap-x-4 gap-y-4 sm:grid-cols-2">
+          {formError && (
+            <div role="alert" className="flex items-start gap-2.5 rounded-xl border border-[#EF4444]/30 bg-[#EF4444]/10 px-4 py-3 text-sm text-[#B91C1C] sm:col-span-2">
+              <CircleAlert className="mt-0.5 size-4 shrink-0" />
+              {formError}
+            </div>
+          )}
+
           <div className="space-y-1.5 sm:col-span-2">
             <Label htmlFor="medicament">Médicament</Label>
             <SelectField

@@ -1,4 +1,4 @@
-import { QueryClient, useQuery, useQueryClient } from "@tanstack/react-query"
+import { keepPreviousData, QueryClient, useQuery, useQueryClient } from "@tanstack/react-query"
 import { ApiError, apiFetch } from "@/lib/api"
 import type { Medicine } from "@/lib/types"
 
@@ -64,6 +64,7 @@ export interface ApiMedicine {
   description: string | null
   category: ApiCategory
   lots?: ApiLot[]
+  dernierMouvement?: { type: "entree" | "sortie"; date: string } | null
 }
 
 export interface ApiMovement {
@@ -73,6 +74,23 @@ export interface ApiMovement {
   motif: string
   date: string
   user: { id: string; nom: string }
+}
+
+// Une ligne de l'historique : le mouvement, avec son médicament
+export interface ApiHistoryItem extends ApiMovement {
+  medicine: { id: string; nom: string; dosage: string; reference: string }
+}
+
+// Les filtres de l'historique : le serveur les applique tous, et pagine
+export interface MovementFilters {
+  page?: number
+  limit?: number
+  medicineId?: string
+  userId?: string
+  type?: "entree" | "sortie"
+  from?: string
+  to?: string
+  search?: string
 }
 
 export interface Page<T> {
@@ -96,7 +114,33 @@ export function toMedicine(m: ApiMedicine): Medicine {
     seuilMin: m.seuilMin,
     description: m.description ?? "",
     quantite: m.quantite,
+    dernierMouvement: m.dernierMouvement ?? null,
   }
+}
+
+// L'historique, avec son résumé (nombre d'opérations, unités entrées, unités sorties) et les auteurs possibles du filtre
+export interface MovementsPage extends Page<ApiHistoryItem> {
+  summary: { operations: number; entrees: number; sorties: number }
+  auteurs: { id: string; nom: string }[]
+}
+
+// Ce qu'on envoie pour enregistrer une entrée ou une sortie (le lot, l'expiration et la provenance ne concernent que les entrées)
+export interface MovementInput {
+  medicineId: string
+  quantite: number
+  date: string
+  motif: string
+  numeroLot?: string
+  dateExpiration?: string
+  provenance?: string
+}
+
+// Ce que le serveur répond : surtout le stock réel après l'opération
+export interface MovementResult {
+  id: string
+  type: "entree" | "sortie"
+  quantite: number
+  medicine: { id: string; nom: string; quantite: number }
 }
 
 // ─── Les appels ────────────────────────────────────────────────────────────────────────────────────
@@ -111,6 +155,11 @@ export const fetchCategories = () => apiFetch<ApiCategory[]>("/categories")
 
 export const fetchMedicineMovements = (id: string, limit: number) =>
   apiFetch<Page<ApiMovement>>("/movements", { query: { medicineId: id, limit } })
+
+export const fetchMovements = (filters: MovementFilters) => apiFetch<MovementsPage>("/movements", { query: { ...filters } })
+
+export const createMovement = (type: "entree" | "sortie", input: MovementInput) =>
+  apiFetch<MovementResult>(`/movements/${type}`, { method: "POST", body: input })
 
 export interface MedicineInput {
   nom: string
@@ -171,4 +220,14 @@ export function useRefreshAfterChange() {
   const queryClient = useQueryClient()
   return () =>
     Promise.all(["medicines", "movements", "alerts", "dashboard"].map((key) => queryClient.invalidateQueries({ queryKey: [key] })))
+}
+
+// L'historique, filtré et paginé par le serveur. Quand un filtre change, le tableau précédent reste affiché pendant le chargement.
+export function useMovements(filters: MovementFilters, enabled = true) {
+  return useQuery({
+    queryKey: keys.movements(filters),
+    queryFn: () => fetchMovements(filters),
+    enabled,
+    placeholderData: keepPreviousData,
+  })
 }

@@ -41,6 +41,8 @@ export interface Medicine {
   seuilMin: number
   description: string
   quantite: number
+  // La dernière entrée ou sortie, donnée par le serveur (absente des données de démonstration)
+  dernierMouvement?: { type: MovementType; date: string } | null
 }
 
 export interface Movement {
