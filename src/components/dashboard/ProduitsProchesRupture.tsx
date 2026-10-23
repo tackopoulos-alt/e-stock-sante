@@ -1,17 +1,11 @@
-
 import { Link } from "react-router-dom"
 import { Package, ShieldCheck } from "lucide-react"
-import { medicines } from "@/data/mockData"
-import { getLevel, medLabel } from "@/lib/stock"
+import type { ApiDashboard } from "@/lib/queries"
+import { medLabel } from "@/lib/stock"
 import { cn } from "@/lib/utils"
 
-export default function ProduitsProchesRupture() {
-  // Stock qui a atteint son seuil minimum, les plus proches de zéro d'abord
-  const rows = medicines
-    .filter((m) => getLevel(m) !== "normal")
-    .sort((a, b) => a.quantite / a.seuilMin - b.quantite / b.seuilMin)
-    .slice(0, 5)
-
+// Les cinq médicaments dont le stock a atteint le seuil, les plus proches de zéro d'abord (classés par le serveur)
+export default function ProduitsProchesRupture({ rows }: { rows: ApiDashboard["produitsProchesRupture"] }) {
   return (
     <div className="rounded-2xl border border-[#E2E8F0] bg-white p-5 shadow-sm">
       <div className="mb-2 flex items-center justify-between gap-3">
@@ -40,21 +34,18 @@ export default function ProduitsProchesRupture() {
             </tr>
           </thead>
           <tbody>
-            {rows.map((m) => {
-              const rupture = getLevel(m) === "rupture"
-              return (
-                <tr key={m.id} className="border-t border-[#E2E8F0]">
-                  <td className="max-w-0 truncate py-3 pr-2 font-medium text-[#0F2747]">{medLabel(m)}</td>
-                  <td className="py-3">
-                    <span className="flex items-center gap-2 font-semibold text-[#172033]">
-                      <span className={cn("size-2.5 rounded-full", rupture ? "bg-[#EF4444]" : "bg-[#F59E0B]")} />
-                      {m.quantite}
-                    </span>
-                  </td>
-                  <td className="py-3 text-right text-[#64748B]">{m.seuilMin}</td>
-                </tr>
-              )
-            })}
+            {rows.map((row) => (
+              <tr key={row.medicine.id} className="border-t border-[#E2E8F0]">
+                <td className="max-w-0 truncate py-3 pr-2 font-medium text-[#0F2747]">{medLabel(row.medicine)}</td>
+                <td className="py-3">
+                  <span className="flex items-center gap-2 font-semibold text-[#172033]">
+                    <span className={cn("size-2.5 rounded-full", row.niveau === "rupture" ? "bg-[#EF4444]" : "bg-[#F59E0B]")} />
+                    {row.quantite}
+                  </span>
+                </td>
+                <td className="py-3 text-right text-[#64748B]">{row.seuilMin}</td>
+              </tr>
+            ))}
           </tbody>
         </table>
       )}

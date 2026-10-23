@@ -25,6 +25,7 @@ export const keys = {
   categories: ["categories"] as const,
   movements: (filters: object) => ["movements", filters] as const,
   alerts: (filters: object) => ["alerts", filters] as const,
+  dashboard: ["dashboard"] as const,
 }
 
 // Un message en français pour n'importe quelle erreur (les messages de validation du serveur sont en anglais)
@@ -148,6 +149,33 @@ export interface AlertsPage extends Page<ApiAlert> {
   summary: { total: number; rupture: number; faible: number; peremption: number }
 }
 
+// Tout le tableau de bord, en un seul appel
+export interface ApiDashboard {
+  stats: {
+    medicaments: { total: number; categories: number }
+    stock: { quantiteTotale: number; variationAujourdhui: number }
+    alertes: { medicamentsEnAlerte: number; faibles: number; ruptures: number; peremptions: number }
+    utilisateurs: { actifs: number; administrateurs: number; enAttente: number }
+  }
+  // Les 7 derniers jours, du plus ancien au plus récent (jour au format AAAA-MM-JJ)
+  evolution: { jour: string; entrees: number; sorties: number; stockTotal: number }[]
+  repartition: { total: number; categories: { nom: string; nombre: number; pourcentage: number }[] }
+  alertesRecentes: {
+    id: string
+    type: ApiAlert["type"]
+    niveau: ApiAlert["niveau"]
+    message: string
+    date: string
+    medicine: { id: string; nom: string; dosage: string }
+  }[]
+  produitsProchesRupture: {
+    medicine: { id: string; nom: string; dosage: string }
+    quantite: number
+    seuilMin: number
+    niveau: "rupture" | "faible"
+  }[]
+}
+
 // L'historique, avec son résumé (nombre d'opérations, unités entrées, unités sorties) et les auteurs possibles du filtre
 export interface MovementsPage extends Page<ApiHistoryItem> {
   summary: { operations: number; entrees: number; sorties: number }
@@ -195,6 +223,8 @@ export const acknowledgeAlert = (id: string) => apiFetch<ApiAlert>(`/alerts/${id
 
 // « Annuler » : l'alerte redevient active
 export const reactivateAlert = (id: string) => apiFetch<ApiAlert>(`/alerts/${id}/reactivate`, { method: "PATCH" })
+
+export const fetchDashboard = () => apiFetch<ApiDashboard>("/dashboard")
 
 export const createMovement = (type: "entree" | "sortie", input: MovementInput) =>
   apiFetch<MovementResult>(`/movements/${type}`, { method: "POST", body: input })
@@ -277,4 +307,9 @@ export function useAlerts(filters: AlertFilters) {
     queryFn: () => fetchAlerts(filters),
     placeholderData: keepPreviousData,
   })
+}
+
+// Le tableau de bord : un seul appel, partagé par tous les blocs de la page
+export function useDashboard() {
+  return useQuery({ queryKey: keys.dashboard, queryFn: fetchDashboard })
 }

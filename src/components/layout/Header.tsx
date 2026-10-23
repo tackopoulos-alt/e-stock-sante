@@ -1,8 +1,8 @@
 import { Link } from "react-router-dom"
 import { BellRing, ChevronDown, Menu, Search } from "lucide-react"
 import { Input } from "@/components/ui/input"
-import { useData } from "@/context/DataContext"
 import { initials } from "@/lib/format"
+import { useProfile } from "@/lib/useProfile"
 
 interface HeaderProps {
   onMenuClick: () => void
@@ -10,7 +10,8 @@ interface HeaderProps {
 }
 
 export default function Header({ onMenuClick, alertCount }: HeaderProps) {
-  const { currentUser } = useData()
+  const profile = useProfile()
+  const nom = profile?.nom ?? ""
 
   return (
     <header className="sticky top-0 z-20 flex h-[72px] items-center gap-3 border-b border-[#E2E8F0] bg-white/85 px-4 backdrop-blur sm:px-6 lg:px-8">
@@ -44,9 +45,9 @@ export default function Header({ onMenuClick, alertCount }: HeaderProps) {
 
         <Link to="/profil" className="flex items-center gap-3 rounded-xl p-1.5 hover:bg-slate-100">
           <div className="flex size-10 items-center justify-center rounded-full bg-[#2563EB] text-sm font-bold text-white">
-            {initials(currentUser.nom)}
+            {initials(nom)}
           </div>
-          <span className="hidden text-sm font-semibold text-[#0F2747] sm:block">{currentUser.nom}</span>
+          <span className="hidden text-sm font-semibold text-[#0F2747] sm:block">{nom}</span>
           <ChevronDown className="hidden size-4 text-[#64748B] sm:block" />
         </Link>
       </div>

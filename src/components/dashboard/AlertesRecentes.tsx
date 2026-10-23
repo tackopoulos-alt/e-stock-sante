@@ -1,16 +1,14 @@
 import { Link } from "react-router-dom"
 import { BellRing, CalendarClock, PackageX, ShieldCheck, TriangleAlert } from "lucide-react"
-import { useData } from "@/context/DataContext"
 import { timeAgo } from "@/lib/format"
-import { buildAlerts, medLabel, type AlertType } from "@/lib/stock"
+import type { ApiDashboard } from "@/lib/queries"
+import { medLabel, type AlertType } from "@/lib/stock"
 import { cn } from "@/lib/utils"
 
 const icons = { rupture: PackageX, faible: TriangleAlert, peremption: CalendarClock } satisfies Record<AlertType, unknown>
 
-export default function AlertesRecentes() {
-  const { lots, medicines, movements } = useData()
-  const alerts = buildAlerts(medicines, movements, lots).slice(0, 5)
-
+// Les cinq alertes les plus importantes, données par le serveur (les critiques d'abord)
+export default function AlertesRecentes({ alerts }: { alerts: ApiDashboard["alertesRecentes"] }) {
   return (
     <div className="rounded-2xl border border-[#E2E8F0] bg-white p-5 shadow-sm">
       <div className="mb-2 flex items-center justify-between gap-3">
@@ -32,8 +30,6 @@ export default function AlertesRecentes() {
       ) : (
         <ul className="divide-y divide-[#E2E8F0]">
           {alerts.map((alert) => {
-            const medicine = medicines.find((m) => m.id === alert.medicineId)
-            if (!medicine) return null
             const Icon = icons[alert.type]
             const critique = alert.niveau === "critique"
 
@@ -48,7 +44,7 @@ export default function AlertesRecentes() {
                   <Icon className="size-[18px]" />
                 </div>
                 <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-semibold text-[#0F2747]">{medLabel(medicine)}</p>
+                  <p className="truncate text-sm font-semibold text-[#0F2747]">{medLabel(alert.medicine)}</p>
                   <p className="text-sm text-[#64748B]">{alert.message}</p>
                 </div>
                 <span className="shrink-0 text-xs text-[#64748B]">{timeAgo(alert.date)}</span>

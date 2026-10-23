@@ -2,8 +2,8 @@ import { NavLink, useNavigate } from "react-router-dom"
 import { BellRing, Boxes, History, LayoutDashboard, LogOut, PackageCheck, Pill, UserCircle, Users, X } from "lucide-react"
 import { toast } from "sonner"
 import { useAuth } from "@/context/AuthContext"
-import { useData } from "@/context/DataContext"
 import { initials } from "@/lib/format"
+import { useProfile } from "@/lib/useProfile"
 import { cn } from "@/lib/utils"
 
 const links = [
@@ -24,7 +24,8 @@ interface SidebarProps {
 
 export default function Sidebar({ open, onClose, alertCount }: SidebarProps) {
   const navigate = useNavigate()
-  const { currentUser } = useData()
+  const profile = useProfile()
+  const nom = profile?.nom ?? ""
   const { logout } = useAuth()
 
   const handleLogout = async () => {
@@ -88,11 +89,11 @@ export default function Sidebar({ open, onClose, alertCount }: SidebarProps) {
         <div className="border-t border-white/10 p-4">
           <div className="flex items-center gap-3">
             <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-[#2563EB] text-sm font-bold">
-              {initials(currentUser.nom)}
+              {initials(nom)}
             </div>
             <div className="min-w-0 flex-1">
-              <p className="truncate text-sm font-semibold">{currentUser.nom}</p>
-              <p className="truncate text-xs text-blue-200">{currentUser.fonction}</p>
+              <p className="truncate text-sm font-semibold">{nom}</p>
+              <p className="truncate text-xs text-blue-200">{profile?.fonction}</p>
             </div>
             <button
               type="button"

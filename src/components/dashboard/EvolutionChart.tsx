@@ -1,40 +1,12 @@
 import { CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts"
 import { ChevronDown, TrendingUp } from "lucide-react"
-import { medicines, movements } from "@/data/mockData"
+import { toChartData } from "@/lib/dashboard"
+import type { ApiDashboard } from "@/lib/queries"
 
 const fmt = (n: number) => n.toLocaleString("fr-FR")
 
-// Entrées, sorties et stock total pour chacun des 7 derniers jours
-function buildData() {
-  const currentStock = medicines.reduce((sum, m) => sum + m.quantite, 0)
-
-  return Array.from({ length: 7 }, (_, i) => {
-    const day = new Date()
-    day.setDate(day.getDate() - (6 - i))
-    const dayKey = day.toDateString()
-
-    const ofDay = movements.filter((mv) => new Date(mv.date).toDateString() === dayKey)
-    const entrees = ofDay.filter((mv) => mv.type === "entree").reduce((s, mv) => s + mv.quantite, 0)
-    const sorties = ofDay.filter((mv) => mv.type === "sortie").reduce((s, mv) => s + mv.quantite, 0)
-
-    // Stock à la fin de ce jour = stock actuel moins l'effet des mouvements des jours suivants
-    const endOfDay = new Date(day)
-    endOfDay.setHours(23, 59, 59, 999)
-    const effectAfter = movements
-      .filter((mv) => new Date(mv.date) > endOfDay)
-      .reduce((s, mv) => s + (mv.type === "entree" ? mv.quantite : -mv.quantite), 0)
-
-    return {
-      jour: day.toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit" }),
-      Entrées: entrees,
-      Sorties: sorties,
-      "Stock total": currentStock - effectAfter,
-    }
-  })
-}
-
-export default function EvolutionChart() {
-  const data = buildData()
+export default function EvolutionChart({ evolution }: { evolution: ApiDashboard["evolution"] }) {
+  const data = toChartData(evolution)
 
   return (
     <div className="rounded-2xl border border-[#E2E8F0] bg-white p-5 shadow-sm">
