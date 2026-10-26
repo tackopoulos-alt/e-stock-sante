@@ -6,7 +6,6 @@ import "./index.css"
 import App from "./App"
 import { AuthProvider } from "@/context/AuthContext"
 import { AccountProvider } from "@/context/AccountContext"
-import { DataProvider } from "@/context/DataContext"
 import { Toaster } from "@/components/ui/sonner"
 import { createQueryClient } from "@/lib/queries"
 
@@ -18,9 +17,7 @@ createRoot(document.getElementById("root")!).render(
       <BrowserRouter>
         <AuthProvider>
           <AccountProvider>
-            <DataProvider>
-              <App />
-            </DataProvider>
+            <App />
           </AccountProvider>
         </AuthProvider>
         <Toaster position="top-right" richColors />
