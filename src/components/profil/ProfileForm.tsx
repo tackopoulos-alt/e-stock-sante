@@ -1,45 +1,58 @@
 import { useState, type FormEvent } from "react"
-import { CircleAlert } from "lucide-react"
+import { CircleAlert, LoaderCircle } from "lucide-react"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { useData } from "@/context/DataContext"
+import { useAccount } from "@/context/AccountContext"
+import { describeError } from "@/lib/queries"
+import { useProfile } from "@/lib/useProfile"
 import { cn } from "@/lib/utils"
 
-type Errors = Partial<Record<"nom" | "email", string>>
+type Errors = Partial<Record<"nom", string>>
 
 const fieldCls = "h-11 border-[#E2E8F0] bg-white"
 const invalidCls = "border-[#EF4444]"
 
 export default function ProfileForm() {
-  const { currentUser, updateProfile } = useData()
-  const [nom, setNom] = useState(currentUser.nom)
-  const [email, setEmail] = useState(currentUser.email)
-  const [telephone, setTelephone] = useState(currentUser.telephone ?? "")
+  const profile = useProfile()
+  const { updateProfile } = useAccount()
+  const [nom, setNom] = useState(profile?.nom ?? "")
+  const [telephone, setTelephone] = useState(profile?.telephone ?? "")
   const [errors, setErrors] = useState<Errors>({})
+  const [formError, setFormError] = useState("")
+  const [submitting, setSubmitting] = useState(false)
 
-  const submit = (e: FormEvent) => {
+  const submit = async (e: FormEvent) => {
     e.preventDefault()
     const next: Errors = {}
-
     if (nom.trim().length < 3) next.nom = "Saisissez votre nom complet."
-    if (!email.trim()) next.email = "Saisissez votre adresse e-mail."
-    else if (!/^\S+@\S+\.\S+$/.test(email.trim())) next.email = "Saisissez une adresse e-mail valide."
 
     setErrors(next)
+    setFormError("")
     if (Object.keys(next).length > 0) return
 
-    const result = updateProfile({ nom, email, telephone })
-    if (!result.ok) {
-      setErrors({ email: result.error })
-      return
+    setSubmitting(true)
+    try {
+      // Une chaîne vide efface le téléphone
+      await updateProfile({ nom: nom.trim(), telephone: telephone.trim() })
+      toast.success("Profil mis à jour", { description: "Vos informations ont été enregistrées." })
+    } catch (err) {
+      setFormError(describeError(err))
+    } finally {
+      setSubmitting(false)
     }
-    toast.success("Profil mis à jour", { description: "Vos informations ont été enregistrées." })
   }
 
   return (
     <form onSubmit={submit} noValidate className="grid gap-x-4 gap-y-4 sm:grid-cols-2">
+      {formError && (
+        <div role="alert" className="flex items-start gap-2.5 rounded-xl border border-[#EF4444]/30 bg-[#EF4444]/10 px-4 py-3 text-sm text-[#B91C1C] sm:col-span-2">
+          <CircleAlert className="mt-0.5 size-4 shrink-0" />
+          {formError}
+        </div>
+      )}
+
       <div className="space-y-1.5">
         <Label htmlFor="profil-nom">Nom complet</Label>
         <Input
@@ -57,18 +70,8 @@ export default function ProfileForm() {
 
       <div className="space-y-1.5">
         <Label htmlFor="profil-email">Adresse e-mail</Label>
-        <Input
-          id="profil-email"
-          type="email"
-          value={email}
-          onChange={(e) => {
-            setEmail(e.target.value)
-            setErrors((x) => ({ ...x, email: undefined }))
-          }}
-          aria-invalid={!!errors.email}
-          className={cn(fieldCls, errors.email && invalidCls)}
-        />
-        {errors.email && <FieldError message={errors.email} />}
+        <Input id="profil-email" type="email" value={profile?.email ?? ""} disabled className={cn(fieldCls, "bg-slate-50 text-[#64748B]")} />
+        <p className="text-xs text-[#64748B]">C'est votre identifiant de connexion : elle ne peut pas être modifiée ici.</p>
       </div>
 
       <div className="space-y-1.5">
@@ -79,7 +82,8 @@ export default function ProfileForm() {
       </div>
 
       <div className="flex items-end justify-end sm:col-span-2">
-        <Button type="submit" className="h-11 bg-[#2563EB] px-6 text-white hover:bg-[#1D4ED8]">
+        <Button type="submit" disabled={submitting} className="h-11 bg-[#2563EB] px-6 text-white hover:bg-[#1D4ED8]">
+          {submitting && <LoaderCircle className="size-4 animate-spin" />}
           Enregistrer
         </Button>
       </div>

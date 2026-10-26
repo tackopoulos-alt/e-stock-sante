@@ -16,6 +16,8 @@ interface AccountContextValue {
   resendVerification: () => Promise<void>
   // Termine l'inscription. Lance une ApiError si le serveur refuse.
   register: (input: RegisterInput) => Promise<void>
+  // Modifie SON nom et SON téléphone. La fiche affichée (en-tête, menu, page Profil) change tout de suite, sans recharger l'application.
+  updateProfile: (input: { nom?: string; telephone?: string }) => Promise<void>
 }
 
 const AccountContext = createContext<AccountContextValue | null>(null)
@@ -106,8 +108,18 @@ export function AccountProvider({ children }: { children: ReactNode }) {
     [user, refresh],
   )
 
+  const updateProfile = useCallback(
+    async (input: { nom?: string; telephone?: string }) => {
+      if (!user) return
+      const profile = await apiFetch<Profile>("/auth/me", { method: "PATCH", body: input })
+      // On remplace la fiche sans passer par l'état « chargement » : l'application reste affichée
+      setRemote({ uid: user.uid, state: stateFromProfile(profile) })
+    },
+    [user],
+  )
+
   return (
-    <AccountContext.Provider value={{ state, refresh, checkVerification, resendVerification, register }}>
+    <AccountContext.Provider value={{ state, refresh, checkVerification, resendVerification, register, updateProfile }}>
       {children}
     </AccountContext.Provider>
   )
