@@ -84,8 +84,8 @@ export default function CompleteRegistration() {
       <form className="grid gap-x-4 gap-y-3 sm:grid-cols-2" onSubmit={handleSubmit} noValidate>
         <div className="sm:col-span-2">
           <Notice kind="info">
-            Si votre structure existe déjà (même nom, même type), vous la rejoindrez et un administrateur devra valider votre compte. Sinon, elle sera
-            créée et vous en serez l'administrateur, en attendant la validation de l'équipe e-Stock Santé.
+            Écrivez le nom de votre structure comme vos collègues l'écrivent. Si elle existe déjà (même nom, même type), vous la rejoindrez et son
+            administrateur validera votre compte. Sinon, elle sera créée : vous en serez l'administrateur et vous entrerez tout de suite.
           </Notice>
         </div>
 
